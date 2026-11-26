@@ -1,0 +1,60 @@
+_subdirectory: template
+_answers_file: .copier-answers.yml
+_min_copier_version: "9.0.0"
+
+# Files the game owns: generated once as a small working example, then never
+# touched by `copier update`.
+_skip_if_exists:
+  - game.mk
+  - GAME.md
+  - README.md
+  - conf.lua
+  - main.lua
+  - "src/*"
+  - "assets/*"
+  - tests/smoke.lua
+  - "tests/test_*.lua"
+  - tools/shots.lua
+  - "docs/screenshots/*"
+
+game:
+  type: str
+  help: Short lowercase name; used for t.identity and dist/<game>.love
+  default: "{{ _folder_name | lower | replace('-', '_') | replace(' ', '_') }}"
+  validator: >-
+    {% if not (game | regex_search('^[a-z][a-z0-9_]*$')) %}
+    use lowercase letters, digits and _ (start with a letter)
+    {% endif %}
+
+title:
+  type: str
+  help: Title shown in the window, on the cartridge label and on the web page
+  default: "{{ game | replace('_', ' ') | title }}"
+
+description:
+  type: str
+  help: One line about the game (goes on the cartridge label and README)
+  default: eat the apples
+
+author:
+  type: str
+  help: Your name or handle (goes on the cartridge label)
+  default: koaning
+
+width:
+  type: int
+  help: Default virtual/window width (640x480 fits 4:3 handhelds cleanly)
+  default: 640
+  validator: >-
+    {% if width < 128 %}
+    width must be at least 128
+    {% endif %}
+
+height:
+  type: int
+  help: Default virtual/window height (640x480 fits 4:3 handhelds cleanly)
+  default: 480
+  validator: >-
+    {% if height < 128 %}
+    height must be at least 128
+    {% endif %}

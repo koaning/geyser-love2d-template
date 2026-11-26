@@ -1,0 +1,14 @@
+# {{ title }}
+
+{{ description }}
+
+Notes for agents about this game (the toolchain notes are in `AGENTS.md`).
+
+- Code: `src/rules.lua` holds the pure Lua game rules (unit-tested directly by
+  `tests/test_rules.lua`), `src/game.lua` holds scenes, input, drawing and save
+  persistence, and `main.lua` wires LÖVE callbacks to `src/game.lua`.
+- Resolution: virtual `{{ width }}x{{ height }}` letterboxed to the window
+  (configured in `conf.lua` and `game.mk`).
+- Controls: arrow keys / WASD (or D-pad) to steer, Space / Enter / Z (or A /
+  Start) to start or retry, Esc (or Back) to quit on desktop/handhelds.
+- Save data: `best.txt` in LÖVE's save directory (`t.identity = "{{ game }}"`).

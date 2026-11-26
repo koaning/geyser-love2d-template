@@ -1,0 +1,56 @@
+name: Template
+
+# Renders the template into a fresh game and runs its toolchain, so a broken
+# template fails here and not in a game.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit zip love xvfb
+          pipx install copier
+
+      - name: Render a game
+        run: |
+          copier copy --defaults --trust --vcs-ref HEAD \
+            -d game=snake -d "title=Snake" . /tmp/snake
+
+      - name: make test
+        working-directory: /tmp/snake
+        run: make test
+
+      - name: make site
+        working-directory: /tmp/snake
+        run: |
+          make fetch-lovejs
+          make site
+          test -f dist/site/snake.love
+          grep -q 'player.js?g=snake.love' dist/site/index.html
+
+      - name: make screenshots & cart
+        working-directory: /tmp/snake
+        run: |
+          make screenshots LOVE="xvfb-run -a love"
+          test -f docs/screenshots/title.png
+          test -f docs/screenshots/cart.png
+          test -f docs/screenshots/gameplay.png
+          make cart
+          test -f dist/snake.love.png
+          unzip -t dist/snake.love.png
+          make test

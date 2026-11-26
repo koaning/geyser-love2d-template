@@ -1,0 +1,333 @@
+-- {{ title }}: eat the apples, grow your tail, avoid walls and yourself.
+
+local rules = require("src.rules")
+
+local game = {}
+
+local W, H = {{ width }}, {{ height }}
+local COLS, ROWS = 16, 12
+local BASE_STEP = 0.13
+local MIN_STEP = 0.075
+local SAVE_FILE = "best.txt"
+
+local fonts = {}
+
+game.state = {
+  scene = "title",
+  st = nil,
+  best = 0,
+  elapsed = 0,
+  accum = 0,
+  eat_flash = 0,
+  crash_flash = 0,
+}
+
+local function rng(n)
+  return love.math.random(n)
+end
+
+local function load_best()
+  if not love.filesystem.getInfo(SAVE_FILE) then return 0 end
+  local raw = love.filesystem.read(SAVE_FILE)
+  return tonumber(raw) or 0
+end
+
+local function save_best(score)
+  love.filesystem.write(SAVE_FILE, tostring(score) .. "\n")
+end
+
+local function step_interval(score)
+  return math.max(MIN_STEP, BASE_STEP - score * 0.002)
+end
+
+local function start_round()
+  local s = game.state
+  s.st = rules.new(COLS, ROWS, rng)
+  s.scene = "play"
+  s.accum = 0
+  s.eat_flash = 0
+  s.crash_flash = 0
+end
+
+local function steer(dx, dy)
+  local s = game.state
+  if s.scene ~= "play" or not s.st then return end
+  rules.turn(s.st, dx, dy)
+end
+
+local function request_quit()
+  if love.system.getOS() == "Web" then
+    game.state.scene = "title"
+  else
+    love.event.quit()
+  end
+end
+
+function game.load()
+  love.graphics.setBackgroundColor(0.06, 0.08, 0.14)
+  fonts.title = love.graphics.newFont(36)
+  fonts.hud = love.graphics.newFont(22)
+  fonts.body = love.graphics.newFont(16)
+  game.state.scene = "title"
+  game.state.st = nil
+  game.state.elapsed = 0
+  game.state.accum = 0
+  game.state.best = load_best()
+end
+
+function game.update(dt)
+  local s = game.state
+  s.elapsed = s.elapsed + dt
+  if s.eat_flash > 0 then s.eat_flash = math.max(0, s.eat_flash - dt) end
+  if s.crash_flash > 0 then s.crash_flash = math.max(0, s.crash_flash - dt) end
+
+  if s.scene ~= "play" or not s.st then return end
+
+  s.accum = s.accum + dt
+  local interval = step_interval(s.st.score)
+  while s.accum >= interval and s.scene == "play" do
+    s.accum = s.accum - interval
+    local outcome = rules.step(s.st, rng)
+    if outcome == "eat" then
+      s.eat_flash = 0.22
+      if s.st.score > s.best then
+        s.best = s.st.score
+        save_best(s.best)
+      end
+      interval = step_interval(s.st.score)
+    elseif outcome == "crash" or outcome == "win" then
+      if s.st.score > s.best then
+        s.best = s.st.score
+        save_best(s.best)
+      end
+      s.crash_flash = outcome == "crash" and 0.35 or 0
+      s.scene = "gameover"
+    end
+  end
+end
+
+function game.keypressed(key)
+  if key == "escape" then
+    request_quit()
+    return
+  end
+  if game.state.scene == "title" or game.state.scene == "gameover" then
+    if key == "space" or key == "return" or key == "kpenter" or key == "z" then
+      start_round()
+    end
+    return
+  end
+  if key == "left" or key == "a" then
+    steer(-1, 0)
+  elseif key == "right" or key == "d" then
+    steer(1, 0)
+  elseif key == "up" or key == "w" then
+    steer(0, -1)
+  elseif key == "down" or key == "s" then
+    steer(0, 1)
+  end
+end
+
+function game.gamepadpressed(_, button)
+  if button == "back" then
+    request_quit()
+    return
+  end
+  if game.state.scene == "title" or game.state.scene == "gameover" then
+    if button == "a" or button == "start" then
+      start_round()
+    end
+    return
+  end
+  if button == "dpleft" then
+    steer(-1, 0)
+  elseif button == "dpright" then
+    steer(1, 0)
+  elseif button == "dpup" then
+    steer(0, -1)
+  elseif button == "dpdown" then
+    steer(0, 1)
+  end
+end
+
+local function draw_apple(cx, cy, r, pulse)
+  local s = r * (1 + 0.06 * math.sin(pulse * 5))
+  love.graphics.setColor(0.95, 0.28, 0.34)
+  love.graphics.circle("fill", cx, cy + s * 0.08, s)
+  love.graphics.setColor(1.0, 0.56, 0.56)
+  love.graphics.circle("fill", cx - s * 0.28, cy - s * 0.18, s * 0.26)
+  love.graphics.setColor(0.32, 0.86, 0.44)
+  love.graphics.polygon("fill", cx, cy - s * 0.72, cx + s * 0.55, cy - s * 1.12, cx + s * 0.22, cy - s * 0.55)
+end
+
+local function draw_snake_emblem(cx, cy, pulse)
+  local seg = 22
+  local pts = {
+    { cx - seg * 2.2, cy + 8 },
+    { cx - seg * 1.2, cy + 8 },
+    { cx - seg * 0.2, cy + 8 },
+    { cx - seg * 0.2, cy - seg + 8 },
+    { cx + seg * 0.8, cy - seg + 8 },
+  }
+  for i = 1, #pts do
+    local t = i / #pts
+    love.graphics.setColor(0.14 + 0.12 * t, 0.62 + 0.26 * t, 0.50 + 0.20 * t)
+    love.graphics.rectangle("fill", pts[i][1] - seg / 2 + 2, pts[i][2] - seg / 2 + 2, seg - 4, seg - 4, 5, 5)
+  end
+  -- Eyes on head (last point, facing right)
+  local hx, hy = pts[#pts][1], pts[#pts][2]
+  love.graphics.setColor(0.06, 0.08, 0.14)
+  love.graphics.circle("fill", hx + 3, hy - 3, 2.5)
+  love.graphics.circle("fill", hx + 3, hy + 3, 2.5)
+  -- Apple ahead of the snake
+  draw_apple(cx + seg * 2.1, cy - seg + 8, 9, pulse)
+end
+
+local function draw_title()
+  local s = game.state
+  local cx, cy = W / 2, H / 2
+
+  -- Centered card so both 4:3 and square Geyser cartridge crops look crisp.
+  love.graphics.setColor(0.11, 0.16, 0.28)
+  love.graphics.rectangle("fill", cx - 195, cy - 155, 390, 310, 14, 14)
+  love.graphics.setColor(0.22, 0.34, 0.56)
+  love.graphics.setLineWidth(3)
+  love.graphics.rectangle("line", cx - 195, cy - 155, 390, 310, 14, 14)
+
+  draw_snake_emblem(cx, cy - 78, s.elapsed)
+
+  love.graphics.setFont(fonts.title)
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.printf("{{ title }}", 0, cy - 30, W, "center")
+
+  love.graphics.setFont(fonts.body)
+  love.graphics.setColor(0.72, 0.78, 0.90)
+  love.graphics.printf("{{ description }}", 0, cy + 20, W, "center")
+
+  love.graphics.setFont(fonts.hud)
+  love.graphics.setColor(0.32, 0.90, 0.64)
+  love.graphics.printf("PRESS SPACE OR A", 0, cy + 70, W, "center")
+
+  if s.best > 0 then
+    love.graphics.setFont(fonts.body)
+    love.graphics.setColor(1.0, 0.86, 0.24)
+    love.graphics.printf("BEST SCORE: " .. s.best, 0, cy + 114, W, "center")
+  end
+end
+
+local function draw_play()
+  local s = game.state
+  local st = s.st
+  local cell = math.floor(math.min((W - 48) / COLS, (H - 88) / ROWS))
+  local bw, bh = cell * COLS, cell * ROWS
+  local ox = math.floor((W - bw) / 2)
+  local oy = math.floor((H - bh) / 2) + 20
+
+  -- HUD
+  love.graphics.setFont(fonts.hud)
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.print("SCORE " .. st.score, ox, oy - 40)
+  if s.best > 0 then
+    love.graphics.setColor(0.65, 0.72, 0.86)
+    love.graphics.printf("BEST " .. s.best, ox, oy - 40, bw, "center")
+  end
+  love.graphics.setColor(0.32, 0.90, 0.64)
+  love.graphics.printf("LEN " .. #st.body, ox, oy - 40, bw, "right")
+
+  -- Board background and subtle checker cells
+  love.graphics.setColor(0.10, 0.14, 0.24)
+  love.graphics.rectangle("fill", ox - 6, oy - 6, bw + 12, bh + 12, 8, 8)
+  for y = 1, ROWS do
+    for x = 1, COLS do
+      if (x + y) % 2 == 0 then
+        love.graphics.setColor(0.13, 0.18, 0.30)
+      else
+        love.graphics.setColor(0.11, 0.16, 0.27)
+      end
+      love.graphics.rectangle("fill", ox + (x - 1) * cell + 1, oy + (y - 1) * cell + 1, cell - 2, cell - 2, 3, 3)
+    end
+  end
+
+  -- Border (flashes green on eat, red on crash)
+  if s.crash_flash > 0 or s.scene == "gameover" then
+    love.graphics.setColor(0.95, 0.32, 0.36)
+  elseif s.eat_flash > 0 then
+    love.graphics.setColor(0.32, 0.90, 0.64)
+  else
+    love.graphics.setColor(0.28, 0.42, 0.66)
+  end
+  love.graphics.setLineWidth(3)
+  love.graphics.rectangle("line", ox - 6, oy - 6, bw + 12, bh + 12, 8, 8)
+
+  -- Food
+  if st.food then
+    local fx = ox + (st.food.x - 0.5) * cell
+    local fy = oy + (st.food.y - 0.5) * cell
+    draw_apple(fx, fy, cell * 0.34, s.elapsed)
+  end
+
+  -- Snake (draw tail-to-head so head sits cleanly on top)
+  local n = #st.body
+  for i = n, 1, -1 do
+    local seg = st.body[i]
+    local t = n > 1 and (1 - (i - 1) / (n - 1)) or 1
+    local pad = i == 1 and 2 or 3
+    local px = ox + (seg.x - 1) * cell + pad
+    local py = oy + (seg.y - 1) * cell + pad
+    local ps = cell - pad * 2
+    love.graphics.setColor(0.14 + 0.14 * t, 0.58 + 0.32 * t, 0.48 + 0.24 * t)
+    love.graphics.rectangle("fill", px, py, ps, ps, 6, 6)
+
+    if i == 1 then
+      love.graphics.setColor(0.06, 0.08, 0.14)
+      local cx = ox + (seg.x - 0.5) * cell + st.dir.x * ps * 0.16
+      local cy = oy + (seg.y - 0.5) * cell + st.dir.y * ps * 0.16
+      local perp_x, perp_y = -st.dir.y * ps * 0.18, st.dir.x * ps * 0.18
+      local er = math.max(2, ps * 0.10)
+      love.graphics.circle("fill", cx + perp_x, cy + perp_y, er)
+      love.graphics.circle("fill", cx - perp_x, cy - perp_y, er)
+    end
+  end
+
+  -- Game-over overlay
+  if s.scene == "gameover" then
+    love.graphics.setColor(0.04, 0.06, 0.12, 0.78)
+    love.graphics.rectangle("fill", ox + bw / 2 - 165, oy + bh / 2 - 74, 330, 148, 12, 12)
+    love.graphics.setColor(0.95, 0.32, 0.36)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", ox + bw / 2 - 165, oy + bh / 2 - 74, 330, 148, 12, 12)
+
+    love.graphics.setFont(fonts.title)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf(st.won and "YOU WIN!" or "GAME OVER", ox, oy + bh / 2 - 58, bw, "center")
+
+    love.graphics.setFont(fonts.body)
+    love.graphics.setColor(0.80, 0.85, 0.94)
+    love.graphics.printf("SCORE " .. st.score .. "  ·  BEST " .. s.best, ox, oy + bh / 2 - 6, bw, "center")
+
+    love.graphics.setFont(fonts.hud)
+    love.graphics.setColor(0.32, 0.90, 0.64)
+    love.graphics.printf("PRESS SPACE OR A", ox, oy + bh / 2 + 28, bw, "center")
+  end
+end
+
+function game.draw()
+  local sw, sh = love.graphics.getDimensions()
+  local scale = math.min(sw / W, sh / H)
+  love.graphics.push()
+  love.graphics.translate(math.floor((sw - W * scale) / 2), math.floor((sh - H * scale) / 2))
+  love.graphics.scale(scale)
+
+  love.graphics.setColor(0.06, 0.08, 0.14)
+  love.graphics.rectangle("fill", 0, 0, W, H)
+
+  if game.state.scene == "title" then
+    draw_title()
+  else
+    draw_play()
+  end
+
+  love.graphics.pop()
+end
+
+return game
