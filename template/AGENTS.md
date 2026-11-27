@@ -37,6 +37,11 @@ Everything else (`game.mk`, `GAME.md`, `README.md`, `conf.lua`, `main.lua`,
   cartridge cover `cart.png`). Rerun it after visual changes.
 - `make cart` appends `dist/$(GAME).love` onto `docs/screenshots/cart.png` to
   build `dist/$(GAME).love.png` — both a viewable PNG and a runnable LÖVE cart.
+- The README must show the cartridge. Keep `docs/screenshots/cart.png` as the
+  first image in `README.md`'s screenshot table (the template ships a
+  `| Cartridge | Gameplay |` row). You may add more screenshots, but never
+  remove or replace the cartridge, and rerun `make screenshots` so it stays
+  current.
 - When showing screenshots or visual previews to the user, embed the images
   directly inline in the conversation response rather than hiding them behind
   a separate markdown artifact.
